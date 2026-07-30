@@ -1,0 +1,324 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  labels:
+    gwcp.guidewire.com/app-name: atmos-crossplane-aws-s3
+    gwcp.guidewire.com/created-by: kdhamane
+    gwcp.guidewire.com/dept: "275"
+    gwcp.guidewire.com/maintained-by: pod-gokarna
+    gwcp.guidewire.com/tenant-name: quadrant-shared
+    gwcp.guidewire.com/version: beta
+  name: xs3.objectstore.atmos.guidewire.com
+spec:
+  claimNames:
+    kind: S3
+    plural: s3
+  defaultCompositeDeletePolicy: Foreground
+  defaultCompositionRef:
+    name: s3.objectstore.atmos.guidewire.com
+  group: objectstore.atmos.guidewire.com
+  names:
+    kind: XS3
+    plural: xs3
+  versions:
+  - name: v1alpha1
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              corsRules:
+                description: CORS configuration rules for the bucket
+                items:
+                  properties:
+                    allowedHeaders:
+                      description: Headers that are allowed in a preflight OPTIONS
+                        request through the CORS interface.
+                      items:
+                        type: string
+                      type: array
+                    allowedMethods:
+                      description: HTTP methods that are allowed to be executed by
+                        CORS clients.
+                      items:
+                        type: string
+                      type: array
+                    allowedOrigins:
+                      description: Origins that are allowed to make requests to the
+                        bucket.
+                      items:
+                        type: string
+                      type: array
+                    description:
+                      description: Description of the CORS rule.
+                      type: string
+                    exposeHeaders:
+                      description: Headers that are exposed to CORS clients.
+                      items:
+                        type: string
+                      type: array
+                    maxAgeSeconds:
+                      description: Maximum time in seconds that a browser can cache
+                        the preflight response for the specified resource.
+                      type: integer
+                  type: object
+                type: array
+              deletionPolicy:
+                default: Delete
+                description: Set the bucket deletionPolicy. Default value is Delete.
+                  Valid values are Delete and Orphan
+                enum:
+                - Delete
+                - Orphan
+                type: string
+              existingResources:
+                description: Existing resources to use instead of creating new ones.
+                properties:
+                  bucketName:
+                    description: Name of the existing S3 bucket to use.
+                    pattern: ^[a-z0-9.-]{3,63}$
+                    type: string
+                  replicationConfiguration:
+                    description: Replication configuration for the existing bucket.
+                    properties:
+                      destinationBucketName:
+                        description: Name of the destination bucket for replication.
+                        pattern: ^[a-z0-9.-]{3,63}$
+                        type: string
+                      destinationBucketRegion:
+                        default: us-east-2
+                        description: Region of the destination bucket for replication.
+                        type: string
+                    type: object
+                type: object
+              forceDestroy:
+                default: false
+                description: Flag to enable force destroy feature which indicates
+                  all objects (including any locked objects) should be deleted from
+                  the bucket so that the bucket can be destroyed without error.
+                type: boolean
+              lifecycleRules:
+                description: Lifecycle rules for managing objects in the bucket.
+                items:
+                  properties:
+                    abortIncompleteMultipartUpload:
+                      description: Abort incomplete multipart uploads after a specified
+                        number of days.
+                      items:
+                        properties:
+                          daysAfterInitiation:
+                            description: Number of days after initiation to abort
+                              incomplete multipart uploads.
+                            type: integer
+                        type: object
+                      type: array
+                    expiration:
+                      description: Lifecycle configuration for expiring objects.
+                      items:
+                        properties:
+                          date:
+                            description: Specific date to expire the object, in RFC3339
+                              format (e.g., 2023-01-13T00:00:00Z, midnight UTC).
+                            format: date-time
+                            type: string
+                          days:
+                            description: Number of days after object creation to expire
+                              the object.
+                            type: integer
+                          expiredObjectDeleteMarker:
+                            description: Indicates whether Amazon S3 will remove a
+                              delete marker with no noncurrent versions. If set to
+                              true, the delete marker will be expired; if set to false
+                              the policy takes no action.
+                            type: boolean
+                        type: object
+                      type: array
+                    filter:
+                      description: Filter for selecting objects to which the rule
+                        applies.
+                      items:
+                        properties:
+                          prefix:
+                            description: Prefix for filtering objects.
+                            type: string
+                          tag:
+                            description: Tags for filtering objects.
+                            items:
+                              properties:
+                                key:
+                                  description: Tag key.
+                                  type: string
+                                value:
+                                  description: Tag value.
+                                  type: string
+                              required:
+                              - key
+                              type: object
+                            type: array
+                        type: object
+                      type: array
+                    id:
+                      description: Unique identifier for the lifecycle rule.
+                      type: string
+                    noncurrentVersionExpiration:
+                      description: Lifecycle configuration for expiring noncurrent
+                        versions of objects.
+                      items:
+                        properties:
+                          noncurrentDays:
+                            description: Number of days after which noncurrent versions
+                              of the object are expired.
+                            type: integer
+                        type: object
+                      type: array
+                    noncurrentVersionTransition:
+                      description: Lifecycle configuration for transitioning noncurrent
+                        versions of objects.
+                      items:
+                        properties:
+                          noncurrentDays:
+                            description: Number of days after which noncurrent versions
+                              of the object are transitioned.
+                            type: integer
+                          storageClass:
+                            description: Storage class to transition the object to.
+                            enum:
+                            - STANDARD_IA
+                            - INTELLIGENT_TIERING
+                            - ONEZONE_IA
+                            - GLACIER
+                            - DEEP_ARCHIVE
+                            - GLACIER_IR
+                            type: string
+                        required:
+                        - storageClass
+                        - noncurrentDays
+                        type: object
+                      type: array
+                    status:
+                      description: Status of the lifecycle rule.
+                      enum:
+                      - Enabled
+                      - Disabled
+                      type: string
+                    transition:
+                      description: Transition rules for changing the storage class
+                        of objects.
+                      items:
+                        properties:
+                          date:
+                            description: Specific date to transition the object, in
+                              RFC3339 format (e.g., 2023-01-13T00:00:00Z, midnight
+                              UTC).
+                            format: date-time
+                            type: string
+                          days:
+                            description: Number of days after object creation to transition
+                              to the specified storage class.
+                            type: integer
+                          storageClass:
+                            description: Storage class to transition the object to.
+                            enum:
+                            - STANDARD_IA
+                            - INTELLIGENT_TIERING
+                            - ONEZONE_IA
+                            - GLACIER
+                            - DEEP_ARCHIVE
+                            - GLACIER_IR
+                            type: string
+                        required:
+                        - storageClass
+                        type: object
+                      type: array
+                  required:
+                  - id
+                  - status
+                  type: object
+                type: array
+              managementPolicies:
+                description: List of management policies to apply to the EFS resources.
+                items:
+                  enum:
+                  - Create
+                  - Delete
+                  - Observe
+                  - '*'
+                  - Update
+                  - LateInitialize
+                  type: string
+                type: array
+              name:
+                description: Name of the S3 bucket to create.
+                type: string
+              objectLock:
+                description: Object lock configuration for the bucket
+                properties:
+                  retentionDays:
+                    default: 45
+                    description: Number of days to retain the object lock
+                    type: integer
+                  retentionMode:
+                    default: GOVERNANCE
+                    description: Mode of object lock retention. Valid values are Compliance
+                      and Governance
+                    enum:
+                    - COMPLIANCE
+                    - GOVERNANCE
+                    type: string
+                type: object
+              region:
+                description: The AWS region where we need to create the resource.
+                type: string
+              replicationConfiguration:
+                description: Replication configuration for the bucket.
+                properties:
+                  destinationBucketRegion:
+                    default: us-east-2
+                    description: Region of the destination bucket for replication.
+                    type: string
+                  destinationBucketSuffix:
+                    default: replica
+                    description: Suffix to append to the destination bucket name.
+                    type: string
+                  kmsKeyArn:
+                    description: KMS key ARN for encrypting replicated objects.
+                    type: string
+                  role:
+                    default: atmos-s3-replication-role
+                    description: IAM role ARN used by S3 for replication.
+                    type: string
+                type: object
+              sseAlgorithm:
+                default: AES256
+                description: Server-side encryption algorithm to use for the bucket.
+                  Default is AES256.
+                enum:
+                - AES256
+                - aws:kms
+                - aws:kms:dsse
+                type: string
+              tags:
+                additionalProperties:
+                  type: string
+                description: A map of tags to add to all resources
+                type: object
+              versioningEnabled:
+                default: true
+                description: Enable versioning in the bucket
+                type: boolean
+            required:
+            - name
+            - region
+            type: object
+          status:
+            properties:
+              bucketStatus:
+                description: status of s3 bucket
+                type: string
+              bucketVersionStatus:
+                description: status of s3 bucket version
+                type: string
+            type: object
+        type: object
+    served: true
