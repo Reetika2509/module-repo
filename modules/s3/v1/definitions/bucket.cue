@@ -1,6 +1,6 @@
 import "time"
 
-"atmos-s3-v1": {
+"bucket": {
 	type: "component"
 	attributes: {
 		workload: definition: {
