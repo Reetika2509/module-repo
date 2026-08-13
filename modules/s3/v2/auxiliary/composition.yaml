@@ -1,0 +1,283 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  labels:
+    gwcp.guidewire.com/app-name: atmos-crossplane-aws-s3
+    gwcp.guidewire.com/created-by: kdhamane
+    gwcp.guidewire.com/dept: "275"
+    gwcp.guidewire.com/maintained-by: pod-gokarna
+    gwcp.guidewire.com/tenant-name: quadrant-shared
+    gwcp.guidewire.com/version: beta
+  name: s3-v2.objectstore.atmos.guidewire.com
+spec:
+  compositeTypeRef:
+    apiVersion: objectstore.atmos.guidewire.com/v1alpha1
+    kind: XS3
+  mode: Pipeline
+  pipeline:
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: "apiVersion: s3.aws.upbound.io/v1beta1\nkind: Bucket\nmetadata:\n
+          \ labels:\n    {{ range $key, $value := .observed.composite.resource.metadata.labels
+          }}\n      {{ $key }}: \"{{ $value }}\"\n    {{ end }}\n  annotations:\n
+          \   {{- if .observed.composite.resource.spec.existingResources }}\n    crossplane.io/external-name:
+          \"{{ .observed.composite.resource.spec.existingResources.bucketName }}\"\n
+          \   {{ setResourceNameAnnotation (print .observed.composite.resource.spec.name
+          \"-s3\") }}\n    {{- else }}\n    meta.upbound.io/encryption: s3/v1beta1/bucketserversideencryptionconfiguration\n
+          \   gotemplating.fn.crossplane.io/composition-resource-name: \"{{ .observed.composite.resource.spec.name
+          }}\"\n    crossplane.io/external-name: \"{{ .observed.composite.resource.spec.name
+          }}\"\n    {{- end }}  \nspec:\n  managementPolicies: {{ $.observed.composite.resource.spec.managementPolicies
+          | toJson }}\n  forProvider:\n    region: \"{{.observed.composite.resource.spec.region}}\"\n
+          \   {{- if not .observed.composite.resource.spec.existingResources }}\n
+          \   forceDestroy: {{.observed.composite.resource.spec.forceDestroy}}\n    tags:
+          \n      {{ range $key, $value := .observed.composite.resource.spec.tags
+          }}\n      {{ $key }}: \"{{ $value }}\"\n      {{ end }}\n    {{- end }}\n"
+      kind: GoTemplate
+      source: Inline
+    step: create-bucket
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: |
+          {{ $bucket := getComposedResource . .observed.composite.resource.spec.name }}
+          {{ $bucketStatus := get $bucket "status" | toYaml | nindent 4 | toJson }}
+          apiVersion: objectstore.atmos.guidewire.com/v1alpha1
+          kind: XS3
+          status:
+            bucketStatus: {{ $bucketStatus }}
+      kind: GoTemplate
+      source: Inline
+    step: update-bucket-status
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: |
+          {{- if not .observed.composite.resource.spec.existingResources.bucketName }}
+          apiVersion: s3.aws.upbound.io/v1beta1
+          kind: BucketServerSideEncryptionConfiguration
+          metadata:
+            labels:
+              {{ range $key, $value := .observed.composite.resource.metadata.labels }}
+                {{ $key }}: "{{ $value }}"
+              {{ end }}
+            annotations:
+              meta.upbound.io/versioning: s3/v1beta1/bucketencryption
+              gotemplating.fn.crossplane.io/composition-resource-name: {{ printf "%s-%s" .observed.composite.resource.spec.name "-encryption" }}
+              crossplane.io/external-name: "{{ .observed.composite.resource.spec.name }}"
+          spec:
+            forProvider:
+              bucket: "{{ .observed.composite.resource.spec.name }}"
+              region: "{{ .observed.composite.resource.spec.region }}"
+              rule:
+                - applyServerSideEncryptionByDefault:
+                    - sseAlgorithm: "{{ .observed.composite.resource.spec.sseAlgorithm }}"
+          {{- end }}
+      kind: GoTemplate
+      source: Inline
+    step: enable-bucket-encryption
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: "{{- if .observed.composite.resource.spec.corsRules }}\napiVersion:
+          s3.aws.upbound.io/v1beta1\nkind: BucketCorsConfiguration\nmetadata:\n  labels:\n
+          \   {{ range $key, $value := .observed.composite.resource.metadata.labels
+          }}\n      {{ $key }}: \"{{ $value }}\"\n    {{ end }}\n  annotations:\n
+          \   meta.upbound.io/versioning: s3/v1beta1/corsrules\n    gotemplating.fn.crossplane.io/composition-resource-name:
+          {{ printf \"%s-%s\" .observed.composite.resource.spec.name \"-cors-rule\"
+          }}\n    crossplane.io/external-name: \"{{ .observed.composite.resource.spec.name
+          }}\"\nspec:\n  forProvider:\n    bucket: \"{{ .observed.composite.resource.spec.name
+          }}\"\n    region: \"{{ .observed.composite.resource.spec.region }}\"\n    corsRule:\n
+          \   {{- range $rule := .observed.composite.resource.spec.corsRules }}\n
+          \     - {{- if $rule.allowedHeaders }}\n        allowedHeaders: \n        {{-
+          range $rule.allowedHeaders }}\n          - \"{{ . }}\"\n        {{- end
+          }}\n        {{- end }}\n        allowedMethods: \n        {{- range $rule.allowedMethods
+          }}\n          - \"{{ . }}\"\n        {{- end }}\n        allowedOrigins:
+          \n        {{- range $rule.allowedOrigins }}\n          - \"{{ . }}\"\n        {{-
+          end }}\n        {{- if $rule.exposeHeaders }}\n        exposeHeaders: \n
+          \       {{- range $rule.exposeHeaders }}\n          - \"{{ . }}\"\n        {{-
+          end }}\n        {{- end }}\n        {{- if $rule.maxAgeSeconds }}\n        maxAgeSeconds:
+          {{ $rule.maxAgeSeconds }}\n        {{- end }}\n    {{- end }}\n{{- end }}\n"
+      kind: GoTemplate
+      source: Inline
+    step: enable-cors-rule
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: |
+          {{- if and (.observed.composite.resource.spec.versioningEnabled) (not .observed.composite.resource.spec.existingResources.bucketName) }}
+          apiVersion: s3.aws.upbound.io/v1beta1
+          kind: BucketVersioning
+          metadata:
+            labels:
+              {{ range $key, $value := .observed.composite.resource.metadata.labels }}
+                {{ $key }}: "{{ $value }}"
+              {{ end }}
+            annotations:
+              meta.upbound.io/versioning: s3/v1beta1/bucketversioning
+              gotemplating.fn.crossplane.io/composition-resource-name: {{ printf "%s-%s" .observed.composite.resource.spec.name "-versioning" }}
+              crossplane.io/external-name: "{{ .observed.composite.resource.spec.name }}"
+          spec:
+            deletionPolicy: "{{ .observed.composite.resource.spec.deletionPolicy }}"
+            forProvider:
+              bucket: "{{ .observed.composite.resource.spec.name }}"
+              region: "{{ .observed.composite.resource.spec.region }}"
+              versioningConfiguration:
+                - status: Enabled
+          {{- end }}
+      kind: GoTemplate
+      source: Inline
+    step: enable-bucket-versioning
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: |
+          {{- if and (.observed.composite.resource.spec.versioningEnabled) (not .observed.composite.resource.spec.existingResources.bucketName)}}
+          {{ $bucketVersionName := printf "%s-%s" .observed.composite.resource.spec.name "-versioning" }}
+          {{ $bucketVersion := getComposedResource . $bucketVersionName }}
+          {{ $bucketVersionStatus := get $bucketVersion "status" | toYaml | nindent 4 | toJson}}
+          apiVersion: objectstore.atmos.guidewire.com/v1alpha1
+          kind: XS3
+          status:
+            bucketVersionStatus: {{ $bucketVersionStatus }}
+          {{ end }}
+      kind: GoTemplate
+      source: Inline
+    step: update-bucket-version-status
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: |
+          {{- if and (hasKey .observed.composite.resource.spec "objectLock") .observed.composite.resource.spec.versioningEnabled }}
+          apiVersion: s3.aws.upbound.io/v1beta1
+          kind: BucketObjectLockConfiguration
+          metadata:
+            labels:
+              {{ range $key, $value := .observed.composite.resource.metadata.labels }}
+                {{ $key }}: "{{ $value }}"
+              {{ end }}
+            annotations:
+              meta.upbound.io/object-lock: s3/v1beta1/bucketobjectlockconfiguration
+              gotemplating.fn.crossplane.io/composition-resource-name: {{ printf "%s-%s" .observed.composite.resource.spec.name "-object-lock" }}
+              crossplane.io/external-name: "{{ .observed.composite.resource.spec.name }}"
+          spec:
+            forProvider:
+              bucket: "{{ .observed.composite.resource.spec.name }}"
+              region: "{{ .observed.composite.resource.spec.region }}"
+              objectLockEnabled: Enabled
+              rule:
+                - defaultRetention:
+                    - days: {{ .observed.composite.resource.spec.objectLock.retentionDays }}
+                      mode: {{ .observed.composite.resource.spec.objectLock.retentionMode }}
+          {{- end }}
+      kind: GoTemplate
+      source: Inline
+    step: object-lock-configuration
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: "{{- if and (hasKey .observed.composite.resource.spec \"replicationConfiguration\")
+          .observed.composite.resource.spec.versioningEnabled }}\napiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1\nkind:
+          ExtraResources\nrequirements:\n  atmosClusterInfo:\n    apiVersion: apiextensions.crossplane.io/v1alpha1\n
+          \   kind: EnvironmentConfig\n    matchName: atmos-cluster-info\n{{- if .extraResources
+          }}\n{{ $atmosClusterInfo := index .extraResources \"atmosClusterInfo\" }}\n{{
+          $atmosClusterInfo := index $atmosClusterInfo.items 0 }}\n{{ $atmosClusterInfo
+          := $atmosClusterInfo.resource.data }}\n{{- if .observed.composite.resource.spec.replicationConfiguration
+          }}\n---\napiVersion: s3.aws.upbound.io/v1beta1\nkind: Bucket\nmetadata:\n
+          \ labels:\n    {{ range $key, $value := .observed.composite.resource.metadata.labels
+          }}\n      {{ $key }}: \"{{ $value }}\"\n    {{ end }}\n  annotations:\n
+          \   gotemplating.fn.crossplane.io/composition-resource-name: \"{{ printf
+          \"%s-%s\" .observed.composite.resource.spec.name .observed.composite.resource.spec.replicationConfiguration.destinationBucketSuffix
+          }}\"\n    crossplane.io/external-name: \"{{ printf \"%s-%s\" .observed.composite.resource.spec.name
+          .observed.composite.resource.spec.replicationConfiguration.destinationBucketSuffix
+          }}\"\nspec:\n  managementPolicies: {{ $.observed.composite.resource.spec.managementPolicies
+          | toJson }}\n  forProvider:\n    region: \"{{ .observed.composite.resource.spec.replicationConfiguration.destinationBucketRegion
+          }}\"\n    forceDestroy: {{.observed.composite.resource.spec.forceDestroy}}\n
+          \   tags: \n      {{ range $key, $value := .observed.composite.resource.spec.tags
+          }}\n      {{ $key }}: \"{{ $value }}\"\n      {{ end }}\n---\napiVersion:
+          s3.aws.upbound.io/v1beta1\nkind: BucketVersioning\nmetadata:\n  labels:\n
+          \   {{ range $key, $value := .observed.composite.resource.metadata.labels
+          }}\n      {{ $key }}: \"{{ $value }}\"\n    {{ end }}\n  annotations:\n
+          \   meta.upbound.io/versioning: s3/v1beta1/bucketversioning\n    gotemplating.fn.crossplane.io/composition-resource-name:
+          {{ printf \"%s-%s-%s\" .observed.composite.resource.spec.name .observed.composite.resource.spec.replicationConfiguration.destinationBucketSuffix
+          \"-versioning\" }}\n    crossplane.io/external-name: \"{{ printf \"%s-%s-%s\"
+          .observed.composite.resource.spec.name .observed.composite.resource.spec.replicationConfiguration.destinationBucketSuffix
+          \"-versioning\" }}\"\nspec:\n  deletionPolicy: \"{{ .observed.composite.resource.spec.deletionPolicy
+          }}\"\n  forProvider:\n    bucket: \"{{ printf \"%s-%s\" .observed.composite.resource.spec.name
+          .observed.composite.resource.spec.replicationConfiguration.destinationBucketSuffix
+          }}\"\n    region: \"{{ .observed.composite.resource.spec.replicationConfiguration.destinationBucketRegion
+          }}\"\n    versioningConfiguration:\n      - status: Enabled\n---\napiVersion:
+          s3.aws.upbound.io/v1beta1\nkind: BucketReplicationConfiguration\nmetadata:\n
+          \ labels:\n    {{- range $key, $value := .observed.composite.resource.metadata.labels
+          }}\n      {{ $key }}: \"{{ $value }}\"\n    {{- end }}\n  annotations:\n
+          \   gotemplating.fn.crossplane.io/composition-resource-name: {{ printf \"%s-%s\"
+          .observed.composite.resource.spec.name \"-replication\" }}\n    crossplane.io/external-name:
+          \"{{ .observed.composite.resource.spec.name }}\"\nspec:\n  forProvider:\n
+          \   bucket: \"{{ .observed.composite.resource.spec.name }}\"\n    region:
+          \"{{ .observed.composite.resource.spec.region }}\"\n    role: {{ printf
+          \"arn:aws:iam::%s:role/%s\" (get $atmosClusterInfo \"aws_account_id\") .observed.composite.resource.spec.replicationConfiguration.role
+          }}\n    rule:\n      - id: \"test\"\n        status: \"Enabled\"\n        sourceSelectionCriteria:\n
+          \         - sseKmsEncryptedObjects:\n              - status: \"Enabled\"\n
+          \       destination:\n          - bucket: {{ printf \"arn:aws:s3:::%s-%s\"
+          .observed.composite.resource.spec.name .observed.composite.resource.spec.replicationConfiguration.destinationBucketSuffix
+          }}\n            encryptionConfiguration:\n              - replicaKmsKeyId:
+          {{ .observed.composite.resource.spec.replicationConfiguration.kmsKeyArn
+          }}\n            storageClass: \"STANDARD\"\n{{- end }}\n{{- end }}\n{{-
+          end }}\n{{- if .observed.composite.resource.spec.existingResources.replicationConfiguration.destinationBucketName}}\napiVersion:
+          s3.aws.upbound.io/v1beta1\nkind: Bucket\nmetadata:\n  labels:\n    {{ range
+          $key, $value := .observed.composite.resource.metadata.labels }}\n      {{
+          $key }}: \"{{ $value }}\"\n    {{ end }}\n  annotations:\n    crossplane.io/external-name:
+          \"{{ .observed.composite.resource.spec.existingResources.replicationConfiguration.destinationBucketName
+          }}\"\n    {{ setResourceNameAnnotation (print .observed.composite.resource.spec.name
+          \"-s3-replica\") }}\nspec:\n  managementPolicies: {{ $.observed.composite.resource.spec.managementPolicies
+          | toJson }}\n  forProvider:\n    region: \"{{.observed.composite.resource.spec.existingResources.replicationConfiguration.destinationBucketRegion}}\"\n{{-
+          end }}\n"
+      kind: GoTemplate
+      source: Inline
+    step: configure-replication
+  - functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      inline:
+        template: |
+          {{- if .observed.composite.resource.spec.lifecycleRules }}
+          apiVersion: s3.aws.upbound.io/v1beta1
+          kind: BucketLifecycleConfiguration
+          metadata:
+            labels:
+              {{ range $key, $value := .observed.composite.resource.metadata.labels }}
+                {{ $key }}: "{{ $value }}"
+              {{ end }}
+            annotations:
+              meta.upbound.io/versioning: s3/v1beta1/bucketlifecyclerules
+              gotemplating.fn.crossplane.io/composition-resource-name: {{ printf "%s-%s" .observed.composite.resource.spec.name "-lifecycle-rule" }}
+              crossplane.io/external-name: "{{ .observed.composite.resource.spec.name }}"
+          spec:
+            forProvider:
+              bucket: "{{ .observed.composite.resource.spec.name }}"
+              region: "{{ .observed.composite.resource.spec.region }}"
+              rule: {{ toYaml .observed.composite.resource.spec.lifecycleRules | nindent 4 }}
+          {{- end }}
+      kind: GoTemplate
+      source: Inline
+    step: enable-lifecycle-rules
+  - functionRef:
+      name: function-auto-ready
+    step: automatically-detect-ready-composed-resources
