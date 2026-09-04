@@ -1,4 +1,4 @@
-"atmos-gcs-v1": {
+"bucket": {
     type: "component"
     attributes: {
         workload: definition: {
